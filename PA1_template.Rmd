@@ -4,22 +4,92 @@ output:
   html_document:
     keep_md: true
 ---
-
-
+```{r cache=TRUE, echo=FALSE}
+library(dplyr)
+library(lattice)
+filePath <- "/Users/guruprasad/Documents/Personal/code/courses/datascience/git/RepData_PeerAssessment1-master/activity.csv"
+WEEKENDS <- c("Saturday", "Sunday")
+```
 ## Loading and preprocessing the data
+```{r cache=TRUE, echo=TRUE}
+data <- read.csv(filePath, header = TRUE)
 
-
+```
 
 ## What is mean total number of steps taken per day?
-
-
+```{r cache=TRUE, echo=TRUE}
+# Get only the non-NA data
+validData <- subset(data, !is.na(steps))
+dailySteps <- tapply(validData$steps, validData$date, sum, na.rm = TRUE)
+hist(dailySteps, col = "blue", xlab = "No. of steps", ylab = "Date", main = "Histogram of the no. of steps walked in a month")
+meanSteps <- mean(as.vector(dailySteps), na.rm = TRUE)
+medianSteps <- median(as.vector(dailySteps), na.rm = TRUE)
+```
+On an **average**, the user walked **`r format(round(I(meanSteps), 2), nsmall=2)` ** steps everyday in the measurement period, with a **median**  **`r format(round(I(medianSteps), 2), nsmall=2)`** steps per day
 
 ## What is the average daily activity pattern?
+``` {r cache = TRUE, echo = TRUE}
+avgStepsByInt <- aggregate(steps ~ interval, validData, mean)
+plot(avgStepsByInt$interval, avgStepsByInt$steps, type = "l", xlab = "Interval in 5 min. increments", ylab = "Avg. no. of steps", main = "Average no. of steps per Interval")
 
-
+# Calculate the the interval that, on average across all days, has the max. number of steps. 
+intWithMaxSteps <- which.max(avgStepsByInt$steps)
+maxAvgStepsInInt <- avgStepsByInt[intWithMaxSteps, "steps"]
+```
+The **`r I(intWithMaxSteps)`th** interval has the maximum of average steps across all the days in the given sample set. On an average, the user has taken **`r format(round(I(maxAvgStepsInInt), 2), nsmall=2)`** steps during this measurement interval. 
 
 ## Imputing missing values
+```{r cache=TRUE, echo=TRUE}
+# Calculte the number of rows that do not have a valid steps count for our calculation. 
+naRows <- which(is.na(data$steps))
+# Now that we have the indices of the rows that do not have a valid Step Count, let us fill these values 
+# with the average of the 5-min interval across all readings. 
+# Remember we have the average step count for each 5-min interval calculated above. 
 
+# Get the cells that hold the interval value for the rows that have steps = NA
+naRowsIntCols <- data[naRows, "interval"]
+
+# Now create a DF with these rows set to the average no. of steps for that interval
+setStepValueForInt <- function(x) {
+  return(avgStepsByInt[(avgStepsByInt$interval == x), "steps"])
+}
+
+naRowsFilled <- sapply(naRowsIntCols, setStepValueForInt)
+
+# Finally replace the rows in the orginal dataset with the filled in Values. 
+newData <- data
+newData[naRows, "steps"] <- naRowsFilled
+newDailySteps <- tapply(newData$steps, newData$date, sum, na.rm = TRUE)
+hist(newDailySteps, col = "green", xlab = "No. of steps", ylab = "Date", main = "Histogram of the no. of steps walked in a month (with NAs filled)")
+meanSteps <- mean(as.vector(newDailySteps))
+medianSteps <- median((as.vector(newDailySteps)))
+```
+
+There are **`r I(length(naRows))`** rows that do not have a valid Steps data (i.e., NA).
+
+After filling in the missing data for steps, on an **average**, the user walked **`r format(round(I(meanSteps), 2), nsmall=2)` ** steps everyday in the measurement period, with a **median**  **`r format(round(I(medianSteps), 2), nsmall=2)`** steps per day. 
+
+Comparing this to the previous mean and median, we see that the mean has remained the same but the median has changed slightly. 
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+```{r cache=TRUE, echo=TRUE}
+
+# Function to determine if a date falls on a weekday or weekend
+typeOfDay <- function(x) {
+  if(weekdays(as.Date(x)) %in% WEEKENDS) {
+    return("weekend")
+  }
+  
+  return ("weekday")
+}
+
+# Create a new factor that will indicate whether an entry was recorded on a weekday or weekend
+newData$type <- factor(sapply(newData$date, FUN = typeOfDay))
+
+# Now aggregate the no. of steps/5-min interval and factor them by the day type
+avgStepsByIntAndDayType <- aggregate(steps ~ interval + type, FUN = mean, data = newData)
+
+# We will now create the panel plot taking into account the day type
+xyplot(steps ~ interval | type, data = avgStepsByIntAndDayType, type = "l", layout = c(1, 2), xlab = "5-min Interval", ylab = "Average no. of steps", main = "Avg. no. of steps per 5-min interval by Day Type")
+```
